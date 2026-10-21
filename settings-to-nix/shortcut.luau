@@ -1,6 +1,6 @@
 --!nonstrict
--- Control-center tile: click opens the panel with export and clean-up, right-click
--- exports the GUI settings to the Nix file directly. The tile is highlighted while the file is behind the GUI.
+-- Control-center tile: click opens the panel, right-click exports the GUI settings to
+-- the Nix file directly. The tile is highlighted while the file is behind the GUI.
 
 local STATUS_KEY = "settings_to_nix.status"
 local COMMAND_KEY = "settings_to_nix.command"
