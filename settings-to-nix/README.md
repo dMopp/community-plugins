@@ -61,19 +61,20 @@ The wallpaper paths Noctalia rewrites on every wallpaper change (`wallpaper.last
 1. **Install and enable** the plugin, and add its control-center tile
    (see [Where the buttons are](#where-the-buttons-are)).
 2. **Set the target file inside your config repository.** Open **Settings → Plugins**,
-   click the gear on the **Settings to Nix** row and set **Target Nix file**, for
-   example `/etc/nixos/noctalia/gui-settings.nix` or
-   `~/nixos-config/noctalia/gui-settings.nix`. The directory must be writable by your
+   click the gear on the **Settings to Nix** row and set **Target Nix file** to a
+   path inside your configuration repository, for example
+   `~/nixos-config/gui-settings.nix`. The directory must be writable by your
    user. Turning on **Export automatically** is recommended.
 3. **Export once** (right-click the tile, or **Export to Nix** in the panel) and track
    the file in git (flakes only):
 
    ```sh
-   git -C /etc/nixos add noctalia/gui-settings.nix
+   git -C ~/nixos-config add gui-settings.nix
    ```
 
 4. **Let your configuration seed `settings.toml` from the file.** Pick the variant
-   that matches your setup and replace `alice` with your user name.
+   that matches your setup, replace `alice` with your user name and adjust the path
+   in `import` (relative to the file you put the snippet in).
 
    **NixOS** (also with hjem):
 
@@ -81,7 +82,7 @@ The wallpaper paths Noctalia rewrites on every wallpaper change (`wallpaper.last
    { pkgs, ... }:
    let
      noctaliaSeed = (pkgs.formats.toml { }).generate "noctalia-settings.toml"
-       (import ./noctalia/gui-settings.nix);
+       (import ./gui-settings.nix);
    in
    {
      # Writes settings.toml only when it does not exist yet (new install, lost state).
@@ -103,7 +104,7 @@ The wallpaper paths Noctalia rewrites on every wallpaper change (`wallpaper.last
    { lib, pkgs, ... }:
    let
      noctaliaSeed = (pkgs.formats.toml { }).generate "noctalia-settings.toml"
-       (import ./noctalia/gui-settings.nix);
+       (import ./gui-settings.nix);
    in
    {
      # Writes settings.toml only when it does not exist yet (new install, lost state).
@@ -159,7 +160,7 @@ Things to know:
 
   The same commands roll an existing machine back to the last state you committed.
 - **What comes back is the state of your last commit/push**, so commit the Nix file
-  regularly (for example as part of your rebuild alias).
+  regularly.
 - **Secrets are not part of the settings.** Calendar passwords and other credentials
   live in your keyring; enter them again after the restore.
 - **Plugins from local `path` sources** are only found if those directories exist
@@ -256,7 +257,8 @@ The generated file looks like this:
 noctalia msg plugin dmopp/settings-to-nix:service all export
 ```
 
-`export` fits well in a rebuild or commit alias.
+Use it from scripts, for example to export right before you commit your
+configuration.
 
 ## Notes
 
