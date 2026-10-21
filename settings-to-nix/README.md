@@ -136,9 +136,38 @@ The wallpaper paths Noctalia rewrites on every wallpaper change (`wallpaper.last
 >
 > Use the `config_version` from your backup. Noctalia reloads the file on its own.
 
-**Restoring** on an existing machine: remove `~/.local/state/noctalia/settings.toml`
-and switch again (or copy the generated file into place yourself). Your configuration
-never overwrites an existing `settings.toml`.
+### Restoring after a reinstall
+
+1. Install the system, clone your configuration repository and build it as usual
+   (`sudo nixos-rebuild switch --flake .` or `home-manager switch`).
+2. **Log in.** The activation snippet from step 4 of the setup writes
+   `settings.toml` from the Nix file because it does not exist yet. On NixOS this
+   runs in the user service `nixos-activation.service` at login and on every switch.
+   If Noctalia starts first, it picks the file up on its own as soon as it appears.
+3. Noctalia now runs with your old settings.
+
+Things to know:
+
+- **Do not change anything in the settings window before that first login.** Any
+  change creates `settings.toml`, and the seed never overwrites an existing file. If
+  it happened anyway, move the file away and run the activation again:
+
+  ```sh
+  mv ~/.local/state/noctalia/settings.toml ~/.local/state/noctalia/settings.toml.old
+  systemctl --user restart nixos-activation.service   # Home Manager: home-manager switch
+  ```
+
+  The same commands roll an existing machine back to the last state you committed.
+- **What comes back is the state of your last commit/push**, so commit the Nix file
+  regularly (for example as part of your rebuild alias).
+- **Secrets are not part of the settings.** Calendar passwords and other credentials
+  live in your keyring; enter them again after the restore.
+- **Plugins from local `path` sources** are only found if those directories exist
+  again. Plugins from the `official` and `community` sources are installed again
+  automatically.
+- **Excluded paths** (by default the current wallpaper paths) are not restored. If a
+  wallpaper rotation script or Noctalia's wallpaper settings set them, nothing is
+  needed; otherwise pick the wallpaper once.
 
 ### Where the buttons are
 
