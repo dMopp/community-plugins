@@ -1,11 +1,17 @@
 --!nonstrict
--- Turns Noctalia's GUI layer (settings.toml in the state dir) into a Nix file.
--- This only ever writes the target file; building or switching is up to the user.
+-- Mirrors Noctalia's GUI layer (settings.toml in the state dir) into a Nix file. Every
+-- export writes the file anew from settings.toml, so a setting deleted in the GUI also
+-- disappears from the file. This only ever writes the target file; what the user's
+-- configuration does with it (seeding settings.toml on a new install) is up to them.
 
 local toml = require("./toml.luau")
 local nix = require("./nix.luau")
 
 local M = {}
+
+-- Part of the first line of every file this plugin writes; an existing target without
+-- it is not overwritten.
+local MARKER = "dmopp/settings-to-nix"
 
 -- Same lookup as Noctalia's FileUtils::stateDir().
 function M.settingsPath()
@@ -101,142 +107,51 @@ end
 
 local function header(source)
 	return table.concat({
-		"# Noctalia settings changed in the GUI, collected by the dmopp/settings-to-nix plugin",
-		"# from " .. source .. ".",
-		"# Every export rewrites this file. Values stay in it after they are cleaned up from",
-		"# settings.toml. Nothing changes on your system until you rebuild/switch",
-		"# (nixos-rebuild switch, home-manager switch, ...).",
+		"# Noctalia settings, mirrored from the GUI by the " .. MARKER .. " plugin",
+		"# (" .. source .. ").",
+		"# Every export overwrites this file. Use it to seed settings.toml on a new install;",
+		"# nothing on your system reads it until your configuration does.",
 		"",
 	}, "\n")
 end
 
-local function emptyTable()
-	return { t = "table", map = {}, keys = {} }
-end
-
--- Parses a TOML file; a missing file is an empty table.
-local function readToml(path)
-	if not noctalia.fileExists(path) then
-		return emptyTable()
-	end
-	local text, readErr = noctalia.readFile(path)
-	if not text then
-		return nil, noctalia.tr("errors.read", { path = path, error = tostring(readErr) })
-	end
-	local parsed, parseErr = toml.parse(text)
-	if not parsed then
-		return nil, noctalia.tr("errors.parse", { path = path, error = parseErr })
-	end
-	return parsed
-end
-
--- Merges `from` into `into`; tables merge key by key, anything else is replaced.
-local function merge(into, from)
-	for _, k in from.keys do
-		local a, b = into.map[k], from.map[k]
-		if a and a.t == "table" and b.t == "table" then
-			merge(a, b)
-		else
-			if a == nil then
-				table.insert(into.keys, k)
-			end
-			into.map[k] = b
-		end
-	end
-end
-
--- Everything exported to a target so far, kept in the plugin data dir as TOML. It is
--- what keeps values in the Nix file after the clean-up removed them from settings.toml.
-function M.storePath(target)
-	local dir = noctalia.pluginDataDir()
-	if not dir then
-		return nil
-	end
-	return dir .. "/exported-" .. string.gsub(target, "[^%w%.%-]", "_") .. ".toml"
-end
-
--- Builds the file content: earlier exports plus the current GUI layer, which wins.
--- Returns { content, current, target, store, collected, stats } or nil, err.
+-- Builds the file content from the current settings.toml.
+-- Returns { content, current, target, stats } or nil, err.
 function M.plan(cfg)
 	local target = M.targetPath(cfg.target)
 	if not target then
 		return nil, noctalia.tr("errors.no_target")
 	end
 
-	local store = M.storePath(target)
-	local collected, err = emptyTable(), nil
-	if store and not noctalia.fileExists(store) and noctalia.fileExists(target) then
-		-- The file holds values this plugin has no record of (record lost, or a file
-		-- written by hand): exporting now could drop them. Import or reset first.
-		return nil, noctalia.tr("errors.no_record", { path = target })
+	local current = noctalia.fileExists(target) and noctalia.readFile(target) or nil
+	local firstLine = current and string.match(current, "^[^\n]*") or ""
+	if current and current ~= "" and not string.find(firstLine, MARKER, 1, true) then
+		return nil, noctalia.tr("errors.foreign", { path = target })
 	end
-	if store then
-		collected, err = readToml(store)
-		if not collected then
-			return nil, err
-		end
-	end
+
 	local source = M.settingsPath()
-	local gui
-	gui, err = readToml(source)
-	if not gui then
-		return nil, err
+	local root = { t = "table", map = {}, keys = {} }
+	if noctalia.fileExists(source) then
+		local text, readErr = noctalia.readFile(source)
+		if not text then
+			return nil, noctalia.tr("errors.read", { path = source, error = tostring(readErr) })
+		end
+		local parsed, parseErr = toml.parse(text)
+		if not parsed then
+			return nil, noctalia.tr("errors.parse", { path = source, error = parseErr })
+		end
+		root = parsed
 	end
-	merge(collected, gui)
 
 	local stats = { values = 0, excluded = 0, skipped = 0 }
-	filter(collected, {}, M.compilePatterns(cfg.exclude), stats)
+	filter(root, {}, M.compilePatterns(cfg.exclude), stats)
 
-	local current = noctalia.fileExists(target) and noctalia.readFile(target) or nil
 	return {
-		content = header(source) .. nix.render(collected),
+		content = header(source) .. nix.render(root),
 		current = current,
 		target = target,
-		store = store,
-		collected = collected,
 		stats = stats,
 	}
-end
-
--- Records what was exported, so later exports keep it.
-function M.saveStore(plan)
-	if plan.store then
-		noctalia.writeFile(plan.store, toml.stringify(plan.collected))
-	end
-end
-
--- Forgets earlier exports for the configured target; the next export starts from
--- the current settings.toml alone.
-function M.resetStore(cfg)
-	local target = M.targetPath(cfg.target)
-	local store = target and M.storePath(target)
-	if store then
-		noctalia.writeFile(store, "")
-	end
-end
-
--- Adds a whole config (a parsed TOML root, e.g. the config-dir layer) to the record
--- of exported values, below what was exported before. Used once when the Nix file
--- takes over the complete Noctalia config. Returns true or nil, err.
-function M.importConfig(cfg, base)
-	local target = M.targetPath(cfg.target)
-	if not target then
-		return nil, noctalia.tr("errors.no_target")
-	end
-	local store = M.storePath(target)
-	if not store then
-		return nil, noctalia.tr("errors.write", { path = "plugin data dir", error = "unavailable" })
-	end
-	local stored, err = readToml(store)
-	if not stored then
-		return nil, err
-	end
-	merge(base, stored)
-	local ok, writeErr = noctalia.writeFile(store, toml.stringify(base))
-	if not ok then
-		return nil, noctalia.tr("errors.write", { path = store, error = tostring(writeErr) })
-	end
-	return true
 end
 
 -- Writes plan.content to plan.target via a temp file, checking it with
@@ -263,7 +178,6 @@ function M.write(cfg, plan, done)
 			noctalia.removeFile(tmp)
 			return done(false, noctalia.tr("errors.write", { path = target, error = tostring(renameErr) }))
 		end
-		M.saveStore(plan)
 		done(true)
 	end
 

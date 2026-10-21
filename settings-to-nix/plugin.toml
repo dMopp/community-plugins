@@ -1,8 +1,7 @@
-# Settings to Nix. The service reads Noctalia's GUI layer (settings.toml in the state
-# dir) and writes it as a Nix attribute set to a configurable file; after the user has
-# rebuilt, it can remove the values Nix now provides from settings.toml. The shortcut
-# tile opens the panel (right-click exports), which walks through export and clean-up.
-# Nothing is built or switched.
+# Settings to Nix. The service mirrors Noctalia's GUI layer (settings.toml in the state
+# dir) into a Nix attribute set in a configurable file, which the user's configuration
+# can use to seed settings.toml on a new install. The shortcut tile opens the panel
+# (right-click exports). Nothing is built or switched.
 
 id = "dmopp/settings-to-nix"
 name = "Settings to Nix"
@@ -11,7 +10,7 @@ plugin_api = 24
 author = "dMopp"
 license = "MIT"
 icon = "snowflake"
-description = "Writes the settings you changed in the Noctalia GUI to a Nix file for your NixOS/Home Manager config."
+description = "Mirrors your Noctalia GUI settings into a Nix file, so your NixOS/Home Manager config can restore them."
 tags = ["shortcut", "service", "nixos", "utility"]
 dependencies = ["nix"]
 
@@ -47,20 +46,11 @@ min = 0
 max = 168
 
 [[setting]]
-key = "remind_rebuild_days"
-type = "int"
-label_key = "settings.remind_rebuild_days.label"
-description_key = "settings.remind_rebuild_days.description"
-default = 0
-min = 0
-max = 30
-
-[[setting]]
 key = "exclude"
 type = "string_list"
 label_key = "settings.exclude.label"
 description_key = "settings.exclude.description"
-default = ["config_version", "wallpaper.last.path", "wallpaper.default.path", "wallpaper.monitors.*.path"]
+default = ["wallpaper.last.path", "wallpaper.default.path", "wallpaper.monitors.*.path"]
 advanced = true
 
 [[setting]]
@@ -79,7 +69,7 @@ entry = "shortcut.luau"
 id = "panel"
 entry = "panel.luau"
 width = 420
-height = 470
+height = 330
 placement = "attached"
 position = "top_right"
 

@@ -10,7 +10,7 @@
 
 local M = {}
 
-local sub, find, match, byte = string.sub, string.find, string.match, string.byte
+local sub, find, match = string.sub, string.find, string.match
 
 local function newTable()
 	return { t = "table", map = {}, keys = {} }
@@ -425,97 +425,6 @@ function M.parse(text)
 		return nil, tostring(err)
 	end
 	return root
-end
-
-local function quote(s)
-	s = string.gsub(s, "\\", "\\\\")
-	s = string.gsub(s, '"', '\\"')
-	s = string.gsub(s, "%c", function(c)
-		local named = { ["\b"] = "\\b", ["\t"] = "\\t", ["\n"] = "\\n", ["\f"] = "\\f", ["\r"] = "\\r" }
-		return named[c] or string.format("\\u%04X", byte(c))
-	end)
-	return '"' .. s .. '"'
-end
-
-local function keyName(k)
-	if match(k, "^[%w_%-]+$") then
-		return k
-	end
-	return quote(k)
-end
-
-local inlineValue
-
-local function inlineTable(node)
-	local parts = {}
-	for _, k in node.keys do
-		table.insert(parts, keyName(k) .. " = " .. inlineValue(node.map[k]))
-	end
-	return #parts == 0 and "{}" or "{ " .. table.concat(parts, ", ") .. " }"
-end
-
-function inlineValue(node)
-	local t = node.t
-	if t == "string" then
-		return quote(node.v)
-	elseif t == "bool" then
-		return node.v and "true" or "false"
-	elseif t == "float" and node.special then
-		return node.special
-	elseif t == "table" then
-		return inlineTable(node)
-	elseif t == "array" then
-		local parts = {}
-		for _, item in node.items do
-			table.insert(parts, inlineValue(item))
-		end
-		return #parts == 0 and "[]" or "[ " .. table.concat(parts, ", ") .. " ]"
-	end
-	return node.v -- int, float, datetime keep their source spelling
-end
-
-local function isSection(node)
-	return node.t == "table" or (node.t == "array" and node.aot)
-end
-
-local function writeTable(node, path, out)
-	for _, k in node.keys do
-		local child = node.map[k]
-		if not isSection(child) then
-			table.insert(out, keyName(k) .. " = " .. inlineValue(child))
-		end
-	end
-	for _, k in node.keys do
-		local child = node.map[k]
-		local childPath = path .. (path == "" and "" or ".") .. keyName(k)
-		if child.t == "table" then
-			local direct = false
-			for _, ck in child.keys do
-				direct = direct or not isSection(child.map[ck])
-			end
-			if direct or #child.keys == 0 then
-				table.insert(out, "")
-				table.insert(out, "[" .. childPath .. "]")
-			end
-			writeTable(child, childPath, out)
-		elseif child.t == "array" and child.aot then
-			for _, item in child.items do
-				table.insert(out, "")
-				table.insert(out, "[[" .. childPath .. "]]")
-				writeTable(item, childPath, out)
-			end
-		end
-	end
-end
-
--- Serializes a root table node back to TOML.
-function M.stringify(root)
-	local out = {}
-	writeTable(root, "", out)
-	if out[1] == "" then
-		table.remove(out, 1)
-	end
-	return table.concat(out, "\n") .. "\n"
 end
 
 return M

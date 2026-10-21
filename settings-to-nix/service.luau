@@ -1,30 +1,21 @@
 --!nonstrict
--- Service: exports the GUI layer to the configured Nix file on request (control-center
--- tile, panel, IPC) and, with auto_export, whenever settings.toml changes. After the user
--- confirms a rebuild, it removes the values Nix now provides from settings.toml.
--- Optionally reminds the user to export and to rebuild. Publishes a status snapshot
--- for the tile and panel. It never builds or switches;
--- the only processes it runs are `nix-instantiate --parse` and `noctalia config export`.
+-- Service: mirrors the GUI layer into the configured Nix file on request (control-center
+-- tile, panel, IPC) and, with auto_export, whenever settings.toml changes. Optionally
+-- reminds the user to export. Publishes a status snapshot for the tile and panel.
+-- The only process it runs is `nix-instantiate --parse` on the file it is about to write.
 
 local exporter = require("./lib/export.luau")
-local cleanup = require("./lib/cleanup.luau")
 
 local STATUS_KEY = "settings_to_nix.status"
 local COMMAND_KEY = "settings_to_nix.command"
 
 local lastSignature = nil
 local busy = false
-local cleaning = false
--- Result of the last cleanup check: number of applied values, or nil when unknown.
-local applied = nil
-local cleanupError = ""
 local pending = false
 
--- Reminder state, kept across restarts: since when the GUI is ahead of the Nix file,
--- when the last export happened, and whether the reminders already fired.
-local REMIND_CHECK_MS = 10 * 60 * 1000
-local reminders = { pendingSince = nil, exportedAt = nil, exportReminded = false, rebuildReminded = false }
-local lastRebuildCheck = 0
+-- Reminder state, kept across restarts: since when the GUI is ahead of the Nix file and
+-- whether the reminder already fired.
+local reminders = { pendingSince = nil, exportReminded = false }
 
 local function remindersPath()
 	local dir = noctalia.pluginDataDir()
@@ -36,7 +27,8 @@ do
 	local raw = path and noctalia.fileExists(path) and noctalia.readFile(path)
 	local saved = raw and noctalia.json.decode(raw)
 	if type(saved) == "table" then
-		reminders = saved
+		reminders.pendingSince = saved.pendingSince
+		reminders.exportReminded = saved.exportReminded == true
 	end
 end
 
@@ -57,7 +49,6 @@ local function config()
 		autoExport = noctalia.getConfig("auto_export") == true,
 		notify = noctalia.getConfig("notify") ~= false,
 		remindExportHours = tonumber(noctalia.getConfig("remind_export_hours")) or 0,
-		remindRebuildDays = tonumber(noctalia.getConfig("remind_rebuild_days")) or 0,
 	}
 end
 
@@ -76,9 +67,6 @@ local function publish(plan, err)
 		target = plan and plan.target or "",
 		values = plan and plan.stats.values or 0,
 		error = err or "",
-		applied = applied,
-		cleaning = cleaning,
-		cleanupError = cleanupError,
 	})
 end
 
@@ -105,7 +93,6 @@ function runExport(manual)
 		return
 	end
 	if plan.content == plan.current then
-		exporter.saveStore(plan)
 		publish(plan)
 		if manual and cfg.notify then
 			noctalia.notify(noctalia.tr("notify.unchanged_title"), noctalia.tr("notify.unchanged_body", { path = plan.target }))
@@ -124,84 +111,12 @@ function runExport(manual)
 		end
 		plan.current = plan.content
 		publish(plan)
-		reminders.exportedAt = noctalia.nowMs()
-		reminders.rebuildReminded = false
-		saveReminders()
-		if cfg.notify then
+		if manual and cfg.notify then
 			noctalia.notify(
 				noctalia.tr("notify.done_title"),
 				noctalia.trp("notify.done_body", plan.stats.values, { path = plan.target })
 			)
 		end
-	end)
-end
-
-local function republish()
-	publish(exporter.plan(config()))
-end
-
-local function runCheck()
-	if cleaning then
-		return
-	end
-	cleaning = true
-	republish()
-	cleanup.check(config(), function(count, err)
-		cleaning = false
-		applied = count
-		cleanupError = err or ""
-		republish()
-	end)
-end
-
-local function runCleanup()
-	if cleaning then
-		return
-	end
-	cleaning = true
-	republish()
-	local cfg = config()
-	cleanup.run(cfg, function(count, info)
-		cleaning = false
-		if count == nil then
-			cleanupError = info
-			noctalia.notifyError(noctalia.tr("notify.cleanup_failed_title"), info)
-		else
-			cleanupError = ""
-			applied = 0
-			if count == 0 then
-				noctalia.notify(noctalia.tr("notify.cleanup_none_title"), noctalia.tr("notify.cleanup_none_body"))
-			elseif cfg.notify then
-				noctalia.notify(
-					noctalia.tr("notify.cleanup_done_title"),
-					noctalia.trp("notify.cleanup_done_body", count, { backup = info })
-				)
-			end
-		end
-		lastSignature = nil
-		republish()
-	end)
-end
-
--- Takes the current config-dir layer into the Nix file, so the file can replace a
--- hand-written config. Earlier exports and the GUI layer stay on top.
-local function runImport()
-	if busy then
-		return
-	end
-	busy = true
-	cleanup.loadBase(function(base, err)
-		busy = false
-		local ok = base ~= nil
-		if ok then
-			ok, err = exporter.importConfig(config(), base)
-		end
-		if not ok then
-			noctalia.notifyError(noctalia.tr("notify.import_failed_title"), err)
-			return
-		end
-		lastSignature = nil
-		runExport(true)
 	end)
 end
 
@@ -228,39 +143,9 @@ local function checkExportReminder(cfg, now)
 	end
 end
 
--- After an export, checks now and then whether the config-dir layer holds the exported
--- values; if it still does not after the configured days, reminds once.
-local function checkRebuildReminder(cfg, now)
-	if cfg.remindRebuildDays <= 0 or not reminders.exportedAt or reminders.rebuildReminded or cleaning then
-		return
-	end
-	if now - reminders.exportedAt < cfg.remindRebuildDays * 86400000 or now - lastRebuildCheck < REMIND_CHECK_MS then
-		return
-	end
-	lastRebuildCheck = now
-	local plan = exporter.plan(cfg)
-	if not plan then
-		return
-	end
-	cleanup.loadBase(function(base)
-		if not base then
-			return
-		end
-		if cleanup.missing(plan.collected, base) == 0 then
-			reminders.exportedAt = nil
-		else
-			reminders.rebuildReminded = true
-			noctalia.notify(noctalia.tr("notify.remind_rebuild_title"), noctalia.tr("notify.remind_rebuild_body"))
-		end
-		saveReminders()
-	end)
-end
-
 function update()
 	local cfg = config()
-	local now = noctalia.nowMs()
-	checkExportReminder(cfg, now)
-	checkRebuildReminder(cfg, now)
+	checkExportReminder(cfg, noctalia.nowMs())
 	local signature = fileSignature(exporter.settingsPath())
 		.. "|"
 		.. fileSignature(exporter.targetPath(cfg.target))
@@ -268,9 +153,6 @@ function update()
 		.. tostring(cfg.target)
 	if signature ~= lastSignature then
 		lastSignature = signature
-		-- settings.toml or the config may have changed: the cleanup count is stale.
-		applied = nil
-		cleanupError = ""
 		refresh()
 	end
 end
@@ -283,23 +165,13 @@ end
 function onIpc(event, _payload)
 	if event == "export" then
 		runExport(true)
-	elseif event == "import" then
-		runImport()
-	elseif event == "reset" then
-		exporter.resetStore(config())
-		runExport(true)
-	elseif event == "check" then
-		runCheck()
-	elseif event == "cleanup" then
-		runCleanup()
 	end
 end
 
 noctalia.state.watch(COMMAND_KEY, function(value)
-	if type(value) ~= "table" then
-		return
+	if type(value) == "table" then
+		onIpc(value.action, nil)
 	end
-	onIpc(value.action, nil)
 end)
 
 update()

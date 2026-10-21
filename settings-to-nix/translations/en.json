@@ -1,75 +1,46 @@
 {
   "errors": {
-    "base": "Could not read your config with noctalia config export: {error}",
+    "foreign": "{path} exists but was not written by this plugin, so it is not overwritten. Pick another target file or move that file away.",
     "invalid": "nix-instantiate rejected the generated file, nothing was written: {error}",
-    "no_cli": "The noctalia command is not on PATH, so the applied config cannot be compared.",
-    "no_record": "{path} already exists, but this plugin has no record of what is in it, so an export could drop values. Use \"Import current config\" in the panel first, or the IPC event reset to start from the GUI settings alone.",
     "no_target": "No target file is set in the plugin settings.",
     "parse": "Could not read {path}: {error}",
     "read": "Could not read {path}: {error}",
     "write": "Could not write {path}: {error}"
   },
   "notify": {
-    "cleanup_done_body": {
-      "one": "1 applied value removed from settings.toml. Backup: {backup}",
-      "other": "{count} applied values removed from settings.toml. Backup: {backup}"
-    },
-    "cleanup_done_title": "settings.toml cleaned up",
-    "cleanup_failed_title": "Settings to Nix: clean-up failed",
-    "cleanup_none_body": "None of the GUI values are in your config yet. Rebuild/switch first.",
-    "cleanup_none_title": "Nothing to clean up",
     "done_body": {
-      "one": "1 setting written to {path}. Rebuild/switch your configuration to apply it.",
-      "other": "{count} settings written to {path}. Rebuild/switch your configuration to apply them."
+      "one": "1 setting written to {path}.",
+      "other": "{count} settings written to {path}."
     },
     "done_title": "Settings exported to Nix",
     "failed_title": "Settings to Nix: export failed",
-    "import_failed_title": "Settings to Nix: import failed",
-    "remind_export_body": "You changed settings in the GUI that are not in your Nix file yet. Click the Export to Nix tile to export them.",
+    "remind_export_body": "You changed settings in the GUI that are not in your Nix file yet. Right-click the Export to Nix tile to export them.",
     "remind_export_title": "Noctalia settings not exported",
-    "remind_rebuild_body": "Your Nix file has settings your system does not use yet. Rebuild/switch your configuration to apply them.",
-    "remind_rebuild_title": "Exported settings not applied",
     "unchanged_body": "{path} already matches the GUI settings.",
     "unchanged_title": "Nothing to export"
   },
   "panel": {
-    "cleanup_button": "I have rebuilt: clean up settings.toml",
-    "cleanup_checking": "Comparing with your config…",
-    "cleanup_confirm": {
-      "one": "Confirm: remove 1 value",
-      "other": "Confirm: remove {count} values"
-    },
-    "cleanup_intro": "Removes GUI values from settings.toml that your rebuilt config now sets to the same value. Values your config does not have yet are kept.",
-    "cleanup_none": "None of the GUI values are in your config yet. Rebuild/switch first.",
-    "cleanup_ready": {
-      "one": "1 value is now provided by your config.",
-      "other": "{count} values are now provided by your config."
-    },
-    "cleanup_title": "3. Clean up",
     "export_button": "Export to Nix",
     "export_current": {
-      "one": "1 setting in the Nix file, up to date.",
-      "other": "{count} settings in the Nix file, up to date."
+      "one": "1 setting in the Nix file, matches the GUI.",
+      "other": "{count} settings in the Nix file, matches the GUI."
     },
     "export_pending": {
       "one": "1 setting, the GUI changed since the last export.",
       "other": "{count} settings, the GUI changed since the last export."
     },
-    "export_title": "1. Export",
-    "import_button": "Import current config",
-    "import_tooltip": "Adds your whole current Noctalia config (without the GUI layer) to the Nix file, so the file can replace your own config. Needed once.",
-    "rebuild_body": "Include the file in your configuration and run nixos-rebuild switch or home-manager switch yourself. This plugin never builds or switches.",
-    "rebuild_title": "2. Rebuild",
-    "recheck": "Compare again",
-    "title": "Settings to Nix"
+    "export_title": "Export",
+    "title": "Settings to Nix",
+    "usage_body": "The file mirrors settings.toml, deletions included. Commit it with your configuration; on a new install your configuration writes it back as settings.toml. Nothing needs a rebuild to take effect: Noctalia keeps using the GUI settings.",
+    "usage_title": "How the file is used"
   },
   "settings": {
     "auto_export": {
-      "description": "Export automatically whenever a setting is changed in the GUI. Off: export with the control-center tile or IPC.",
+      "description": "Export automatically whenever a setting is changed in the GUI. Off: export with the control-center tile, the panel or IPC.",
       "label": "Export automatically"
     },
     "exclude": {
-      "description": "Dotted paths left out of the export; * matches one level. The defaults are runtime data that changes with every wallpaper switch.",
+      "description": "Dotted paths left out of the export; * matches one level. The defaults are wallpaper paths that change with every wallpaper switch.",
       "label": "Excluded paths"
     },
     "notify": {
@@ -80,12 +51,8 @@
       "description": "Notify once when GUI changes have not been exported for this long. 0 turns it off; not used with automatic export.",
       "label": "Remind to export after (hours)"
     },
-    "remind_rebuild_days": {
-      "description": "Notify once when exported settings are still not in your built config this many days after the export. 0 turns it off.",
-      "label": "Remind to rebuild after (days)"
-    },
     "target_path": {
-      "description": "Nix file the GUI settings are written to (overwritten on every export). With flakes, point this inside your config repository.",
+      "description": "Nix file the settings are mirrored to (overwritten on every export). With flakes, point this inside your config repository.",
       "label": "Target Nix file"
     },
     "validate": {
