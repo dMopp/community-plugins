@@ -1,0 +1,88 @@
+# Settings to Nix. The service reads Noctalia's GUI layer (settings.toml in the state
+# dir) and writes it as a Nix attribute set to a configurable file; after the user has
+# rebuilt, it can remove the values Nix now provides from settings.toml. The shortcut
+# tile opens the panel (right-click exports), which walks through export and clean-up.
+# Nothing is built or switched.
+
+id = "dmopp/settings-to-nix"
+name = "Settings to Nix"
+version = "1.0.0"
+plugin_api = 24
+author = "dMopp"
+license = "MIT"
+icon = "snowflake"
+description = "Writes the settings you changed in the Noctalia GUI to a Nix file for your NixOS/Home Manager config."
+tags = ["shortcut", "service", "nixos", "utility"]
+dependencies = ["nix"]
+
+[[setting]]
+key = "target_path"
+type = "file"
+label_key = "settings.target_path.label"
+description_key = "settings.target_path.description"
+default = "~/.config/noctalia/gui-settings.nix"
+extensions = [".nix"]
+
+[[setting]]
+key = "auto_export"
+type = "bool"
+label_key = "settings.auto_export.label"
+description_key = "settings.auto_export.description"
+default = false
+
+[[setting]]
+key = "notify"
+type = "bool"
+label_key = "settings.notify.label"
+description_key = "settings.notify.description"
+default = true
+
+[[setting]]
+key = "remind_export_hours"
+type = "int"
+label_key = "settings.remind_export_hours.label"
+description_key = "settings.remind_export_hours.description"
+default = 0
+min = 0
+max = 168
+
+[[setting]]
+key = "remind_rebuild_days"
+type = "int"
+label_key = "settings.remind_rebuild_days.label"
+description_key = "settings.remind_rebuild_days.description"
+default = 0
+min = 0
+max = 30
+
+[[setting]]
+key = "exclude"
+type = "string_list"
+label_key = "settings.exclude.label"
+description_key = "settings.exclude.description"
+default = ["config_version", "wallpaper.last.path", "wallpaper.default.path", "wallpaper.monitors.*.path"]
+advanced = true
+
+[[setting]]
+key = "validate"
+type = "bool"
+label_key = "settings.validate.label"
+description_key = "settings.validate.description"
+default = true
+advanced = true
+
+[[shortcut]]
+id = "export"
+entry = "shortcut.luau"
+
+[[panel]]
+id = "panel"
+entry = "panel.luau"
+width = 420
+height = 470
+placement = "attached"
+position = "top_right"
+
+[[service]]
+id = "service"
+entry = "service.luau"
