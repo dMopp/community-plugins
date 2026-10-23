@@ -39,13 +39,14 @@ GUI ──▶ settings.toml ──export──▶ gui-settings.nix   (backed up,
 ```
 
 - **Export** writes `settings.toml` into the Nix file as an exact mirror, live: every
-  change in the GUI is in the file within a few seconds (**Export automatically**, on by
-  default). A setting you delete in the GUI also disappears from the file.
+  change in the GUI is in the file within a few seconds. A setting you delete in the
+  GUI also disappears from the file.
 - **Restore** is a command you run yourself. It builds `settings.toml` from the Nix
   file and puts it in place. Nothing happens automatically.
 
 The wallpaper paths Noctalia rewrites on every wallpaper change (`wallpaper.last.path`,
-`wallpaper.default.path`, `wallpaper.monitors.*.path`) are left out by default.
+`wallpaper.default.path`, `wallpaper.monitors.*.path`) are left out, so changing the
+wallpaper does not change the file.
 
 ## Usage
 
@@ -140,23 +141,21 @@ Things to know:
   live in your keyring; enter them again after the restore.
 - **Plugins from local `path` sources** are only found if those directories exist
   again.
-- **Excluded paths** (by default the current wallpaper paths) are not restored; pick
-  the wallpaper once.
+- **The wallpaper is not restored** (see [How it works](#how-it-works)); pick it once.
 
 ### Where the buttons are
 
-You do not need a button: with **Export automatically** (the default) the file is
-always current. A button is useful to see the status, or if you turn automatic export
-off. Noctalia does not add plugin shortcuts to the control center on its own, so after
-enabling the plugin you will not see one anywhere yet. There are three ways to use it;
-pick one.
+You do not need a button: the file is always current. A button only shows the status
+and lets you export by hand. Noctalia does not add plugin shortcuts to the control
+center on its own, so after enabling the plugin you will not see one anywhere. If you
+want one, there are two ways.
 
 > [!NOTE]
 > The control center's Home tab holds **at most six shortcuts**, and the default set
 > already uses all six (`wifi`, `bluetooth`, `caffeine`, `nightlight`,
 > `notification`, `power_profile`). To add the tile you have to **remove another
 > shortcut first**; until then the **+** button stays disabled and nothing tells you
-> why. If you do not want to give one up, use the panel (B) or automatic export (C).
+> why. If you do not want to give one up, use the panel (B).
 
 **A. Control-center tile**
 
@@ -187,19 +186,12 @@ noctalia msg panel-toggle dmopp/settings-to-nix:panel
 The panel shows how many settings the file holds, whether the GUI changed since the
 last export, the target path and an **Export to Nix** button.
 
-**C. No button at all.** Leave **Export automatically** on (the default). Every GUI
-change is then written to the Nix file within a few seconds.
-
 ### Everyday use
 
 1. Change settings in the GUI as usual. They take effect immediately, as always.
-2. The Nix file follows on its own (**Export automatically**). With it turned off,
-   export with the tile, the panel or IPC.
+2. The Nix file follows on its own within a few seconds.
 3. Back up the Nix file (commit it) regularly. A restore brings back the state of the
    last file you saved.
-
-An optional reminder (off by default) notifies you once when GUI changes have not been
-exported for some hours.
 
 The generated file looks like this (shortened):
 
@@ -230,12 +222,7 @@ pkgs.writeShellScriptBin "noctalia-restore-settings" ''
 
 | Setting | Type | Default | Description |
 | --- | --- | --- | --- |
-| `target_path` | `file` | `~/.config/noctalia/gui-settings.nix` | File the settings are mirrored to. It is overwritten on every export. Put it somewhere you back up. |
-| `auto_export` | `bool` | `true` | Export whenever `settings.toml` changes (checked every 2 seconds). Off: only on demand. |
-| `notify` | `bool` | `true` | Notification after a manual export. Errors are always shown. |
-| `remind_export_hours` | `int` | `0` | Notify once when GUI changes have not been exported for this many hours (0–168, 0 = off). Not used with `auto_export`. |
-| `exclude` | `string_list` | wallpaper paths | Dotted paths left out of the export; `*` matches one level (advanced). |
-| `validate` | `bool` | `true` | Check the generated file with `nix-instantiate --parse` before replacing the target (advanced). |
+| `target_path` | `file` | `~/.config/noctalia/gui-settings.nix` | The Nix file the settings are mirrored to, kept up to date on every GUI change. Put it somewhere you back up. |
 
 ## IPC
 
@@ -252,12 +239,13 @@ configuration.
 - **Nothing of yours is overwritten.** The plugin only replaces a target file that it
   wrote itself (recognized by its first line). Point it at any other existing file and
   the export stops with an error.
-- **Files written:** the target file (via `<target>.tmp` and a rename) and
-  `reminders.json` in the plugin data dir
-  (`~/.local/state/noctalia/plugins/data/dmopp/settings-to-nix/`). The plugin never
-  writes `settings.toml`; only the restore command you run yourself does.
-- **Processes:** only `nix-instantiate --parse <target>.tmp` (when `validate` is on).
-  There is no network access.
+- **Files written:** only the target file (via `<target>.tmp` and a rename). The plugin
+  never writes `settings.toml`; only the restore command you run yourself does.
+- **Processes:** only `nix-instantiate --parse <target>.tmp`, to check the file before
+  it replaces the old one (skipped when `nix-instantiate` is not on `PATH`). There is no
+  network access.
+- **A failed write** (for example a directory your user may not write to) is shown once
+  and retried when a setting or the target path changes.
 - TOML values Nix cannot express (`inf`, `nan`) are left out; dates are exported as
   strings.
 - The plugin reads `settings.toml` itself (with its own TOML reader), so it does not

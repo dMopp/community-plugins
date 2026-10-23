@@ -13,6 +13,10 @@ local M = {}
 -- it is not overwritten.
 local MARKER = "dmopp/settings-to-nix"
 
+-- Left out of the export: the wallpaper paths Noctalia rewrites on every wallpaper
+-- change. Dotted paths; `*` matches exactly one level.
+local EXCLUDE = { "wallpaper.last.path", "wallpaper.default.path", "wallpaper.monitors.*.path" }
+
 -- Same lookup as Noctalia's FileUtils::stateDir().
 function M.settingsPath()
 	for _, var in { "NOCTALIA_STATE_HOME", "XDG_STATE_HOME" } do
@@ -32,7 +36,6 @@ function M.targetPath(raw)
 	return noctalia.expandPath(raw)
 end
 
--- Exclude patterns are dotted paths; `*` matches exactly one level.
 function M.compilePatterns(list)
 	local patterns = {}
 	for _, p in list or {} do
@@ -185,7 +188,7 @@ function M.plan(cfg)
 	end
 
 	local stats = { values = 0, excluded = 0, skipped = 0 }
-	filter(root, {}, M.compilePatterns(cfg.exclude), stats)
+	filter(root, {}, M.compilePatterns(EXCLUDE), stats)
 
 	return {
 		content = header(source, string.match(target, "[^/]*$")) .. script(nix.render(root, "  ")),
@@ -196,9 +199,9 @@ function M.plan(cfg)
 end
 
 -- Writes plan.content to plan.target via a temp file, checking it with
--- `nix-instantiate --parse` first when cfg.validate is set and the tool exists.
+-- `nix-instantiate --parse` first when the tool exists.
 -- Calls done(true) or done(false, err).
-function M.write(cfg, plan, done)
+function M.write(plan, done)
 	local target = plan.target
 	local dir = string.match(target, "^(.*)/[^/]*$")
 	if dir and dir ~= "" then
@@ -222,7 +225,7 @@ function M.write(cfg, plan, done)
 		done(true)
 	end
 
-	if not cfg.validate or not noctalia.commandExists("nix-instantiate") then
+	if not noctalia.commandExists("nix-instantiate") then
 		return commit()
 	end
 	local started = noctalia.runAsync({ "nix-instantiate", "--parse", tmp }, function(result)

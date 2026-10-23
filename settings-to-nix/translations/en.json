@@ -14,8 +14,6 @@
     },
     "done_title": "Settings exported to Nix",
     "failed_title": "Settings to Nix: export failed",
-    "remind_export_body": "You changed settings in the GUI that are not in your Nix file yet. Right-click the Export to Nix tile to export them.",
-    "remind_export_title": "Noctalia settings not exported",
     "unchanged_body": "{path} already matches the GUI settings.",
     "unchanged_title": "Nothing to export"
   },
@@ -35,29 +33,9 @@
     "usage_title": "How the file is used"
   },
   "settings": {
-    "auto_export": {
-      "description": "Write the Nix file within a few seconds of every change in the GUI, so the backup is always current. Off: export only with the control-center tile, the panel or IPC.",
-      "label": "Export automatically"
-    },
-    "exclude": {
-      "description": "Dotted paths left out of the export; * matches one level. The defaults are wallpaper paths that change with every wallpaper switch.",
-      "label": "Excluded paths"
-    },
-    "notify": {
-      "description": "Show a notification after a manual export. Errors are always shown.",
-      "label": "Notifications"
-    },
-    "remind_export_hours": {
-      "description": "Notify once when GUI changes have not been exported for this long. 0 turns it off; not used with automatic export.",
-      "label": "Remind to export after (hours)"
-    },
     "target_path": {
-      "description": "Nix file the settings are mirrored to (overwritten on every export). Keep it somewhere you back up, for example a git repository.",
+      "description": "Nix file the settings are mirrored to, kept up to date on every change in the GUI. Keep it somewhere you back up, for example a git repository.",
       "label": "Target Nix file"
-    },
-    "validate": {
-      "description": "Check the generated file with nix-instantiate --parse before replacing the target (skipped when nix-instantiate is not on PATH).",
-      "label": "Validate with nix-instantiate"
     }
   },
   "shortcut": {
