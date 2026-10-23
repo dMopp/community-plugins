@@ -31,7 +31,7 @@
     },
     "export_title": "Export",
     "title": "Settings to Nix",
-    "usage_body": "The file mirrors settings.toml, deletions included. Commit it with your configuration; on a new install your configuration writes it back as settings.toml. Nothing needs a rebuild to take effect: Noctalia keeps using the GUI settings.",
+    "usage_body": "The file mirrors settings.toml, deletions included. It is your backup: keep it safe, for example in git. To restore, run the nix-build command written at the top of the file, then restart Noctalia.",
     "usage_title": "How the file is used"
   },
   "settings": {
@@ -52,7 +52,7 @@
       "label": "Remind to export after (hours)"
     },
     "target_path": {
-      "description": "Nix file the settings are mirrored to (overwritten on every export). With flakes, point this inside your config repository.",
+      "description": "Nix file the settings are mirrored to (overwritten on every export). Keep it somewhere you back up, for example a git repository.",
       "label": "Target Nix file"
     },
     "validate": {

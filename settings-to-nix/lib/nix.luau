@@ -128,9 +128,10 @@ function value(node, indent, inList)
 	return scalar(node, inList)
 end
 
--- Renders a root table node as a Nix attribute set, ending in a newline.
-function M.render(root)
-	return value(root, "", false) .. "\n"
+-- Renders a root table node as a Nix attribute set. `indent` is the indentation of the
+-- line the set starts on; the result has no trailing newline.
+function M.render(root, indent)
+	return value(root, indent or "", false)
 end
 
 return M

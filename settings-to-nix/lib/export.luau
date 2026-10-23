@@ -1,8 +1,8 @@
 --!nonstrict
 -- Mirrors Noctalia's GUI layer (settings.toml in the state dir) into a Nix file. Every
 -- export writes the file anew from settings.toml, so a setting deleted in the GUI also
--- disappears from the file. This only ever writes the target file; what the user's
--- configuration does with it (seeding settings.toml on a new install) is up to them.
+-- disappears from the file. The file is a small Nix expression that, run by hand, writes
+-- the settings back as settings.toml. This only ever writes the target file.
 
 local toml = require("./toml.luau")
 local nix = require("./nix.luau")
@@ -105,12 +105,53 @@ local function filter(node, path, patterns, stats)
 	node.keys = kept
 end
 
-local function header(source)
+local function header(source, name)
 	return table.concat({
 		"# Noctalia settings, mirrored from the GUI by the " .. MARKER .. " plugin",
-		"# (" .. source .. ").",
-		"# Every export overwrites this file. Use it to seed settings.toml on a new install;",
-		"# nothing on your system reads it until your configuration does.",
+		"# (" .. source .. "). Every export overwrites this file.",
+		"#",
+		"# This file is your backup: keep it somewhere safe, for example in git.",
+		"#",
+		"# To restore, run this as your user in the directory of this file:",
+		"#   $(nix-build --no-out-link ./" .. name .. ")/bin/noctalia-restore-settings",
+		"# It replaces settings.toml (the old one is kept as settings.toml.bak-<time>).",
+		"# Then restart Noctalia; it installs the plugins listed here again on startup.",
+		"",
+	}, "\n")
+end
+
+-- The restore script around the rendered settings. It writes them back as settings.toml
+-- to the state dir Noctalia uses (same lookup as FileUtils::stateDir()).
+local function script(settings)
+	return table.concat({
+		"{ pkgs ? import <nixpkgs> { } }:",
+		"let",
+		"  settings = " .. settings .. ";",
+		'  settingsToml = (pkgs.formats.toml { }).generate "noctalia-settings.toml" settings;',
+		"in",
+		'pkgs.writeShellScriptBin "noctalia-restore-settings" \'\'',
+		"  set -eu",
+		"  PATH=${pkgs.coreutils}/bin:$PATH",
+		'  if [ -n "\'\'${NOCTALIA_STATE_HOME:-}" ]; then',
+		'    dir="$NOCTALIA_STATE_HOME/noctalia"',
+		'  elif [ -n "\'\'${XDG_STATE_HOME:-}" ]; then',
+		'    dir="$XDG_STATE_HOME/noctalia"',
+		"  else",
+		'    dir="$HOME/.local/state/noctalia"',
+		"  fi",
+		'  mkdir -p "$dir"',
+		'  if [ -e "$dir/settings.toml" ]; then',
+		'    backup="$dir/settings.toml.bak-$(date +%Y%m%d-%H%M%S)"',
+		'    cp "$dir/settings.toml" "$backup"',
+		'    echo "Previous settings saved to $backup"',
+		"  fi",
+		'  install -m 644 ${settingsToml} "$dir/settings.toml.tmp"',
+		'  mv "$dir/settings.toml.tmp" "$dir/settings.toml"',
+		"  # Skip the first-run wizard; it would write its own choices over the restored ones.",
+		'  touch "$dir/.setup-complete"',
+		'  echo "Noctalia settings restored to $dir/settings.toml."',
+		'  echo "Restart Noctalia so it installs the plugins from the restored settings."',
+		"\'\'",
 		"",
 	}, "\n")
 end
@@ -147,7 +188,7 @@ function M.plan(cfg)
 	filter(root, {}, M.compilePatterns(cfg.exclude), stats)
 
 	return {
-		content = header(source) .. nix.render(root),
+		content = header(source, string.match(target, "[^/]*$")) .. script(nix.render(root, "  ")),
 		current = current,
 		target = target,
 		stats = stats,
