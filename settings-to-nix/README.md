@@ -167,8 +167,10 @@ want one, there are two ways.
 3. The tile (a snowflake) now appears at the bottom of the control center's Home tab:
    - **Click** opens the panel.
    - **Right-click** exports directly, without opening the panel.
-   - The tile is highlighted while the GUI has changes that are not in the Nix file
-     yet, and reads **Export to Nix (changed)**.
+   - **When writing the file fails** (for example no write access to its directory),
+     the tile switches to a warning icon, is highlighted and reads **Nix export
+     failed**. Open the panel to see the error. Noctalia's tiles cannot be colored, so
+     this is as close to "red" as it gets.
 
 The same in TOML:
 
@@ -245,7 +247,8 @@ configuration.
   it replaces the old one (skipped when `nix-instantiate` is not on `PATH`). There is no
   network access.
 - **A failed write** (for example a directory your user may not write to) is shown once
-  and retried when a setting or the target path changes.
+  and retried when a setting or the target path changes. After fixing the cause,
+  right-click the tile (or use the panel or IPC) to export right away.
 - TOML values Nix cannot express (`inf`, `nan`) are left out; dates are exported as
   strings.
 - The plugin reads `settings.toml` itself (with its own TOML reader), so it does not

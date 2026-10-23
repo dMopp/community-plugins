@@ -1,6 +1,7 @@
 --!nonstrict
 -- Control-center tile: click opens the panel, right-click exports the GUI settings to
--- the Nix file directly. The tile is highlighted while the file is behind the GUI.
+-- the Nix file directly. When the last export failed, the tile shows a warning icon and
+-- is highlighted (the shortcut API has no colors).
 
 local STATUS_KEY = "settings_to_nix.status"
 local COMMAND_KEY = "settings_to_nix.command"
@@ -8,15 +9,16 @@ local COMMAND_KEY = "settings_to_nix.command"
 local status = noctalia.state.get(STATUS_KEY) or {}
 
 local function render()
-	shortcut.setIcon("snowflake")
-	if status.error and status.error ~= "" then
+	local failed = status.error ~= nil and status.error ~= ""
+	shortcut.setIcon(failed and "alert-triangle" or "snowflake")
+	if failed then
 		shortcut.setLabel(noctalia.tr("shortcut.error"))
 	elseif status.pending then
 		shortcut.setLabel(noctalia.tr("shortcut.pending"))
 	else
 		shortcut.setLabel(noctalia.tr("shortcut.label"))
 	end
-	shortcut.setActive(status.pending == true)
+	shortcut.setActive(failed)
 end
 
 noctalia.state.watch(STATUS_KEY, function(value)
