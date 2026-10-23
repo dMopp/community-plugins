@@ -5,7 +5,7 @@
     "no_target": "No target file is set in the plugin settings.",
     "parse": "Could not read {path}: {error}",
     "read": "Could not read {path}: {error}",
-    "write": "Could not write {path}: {error}"
+    "write": "Could not write {path}: {error}. Your user needs write access to the directory of the target file."
   },
   "notify": {
     "done_body": {
@@ -36,7 +36,7 @@
   },
   "settings": {
     "auto_export": {
-      "description": "Export automatically whenever a setting is changed in the GUI. Off: export with the control-center tile, the panel or IPC.",
+      "description": "Write the Nix file within a few seconds of every change in the GUI, so the backup is always current. Off: export only with the control-center tile, the panel or IPC.",
       "label": "Export automatically"
     },
     "exclude": {

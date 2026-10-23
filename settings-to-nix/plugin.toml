@@ -27,7 +27,7 @@ key = "auto_export"
 type = "bool"
 label_key = "settings.auto_export.label"
 description_key = "settings.auto_export.description"
-default = false
+default = true
 
 [[setting]]
 key = "notify"

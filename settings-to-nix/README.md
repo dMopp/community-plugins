@@ -38,8 +38,9 @@ GUI ──▶ settings.toml ──export──▶ gui-settings.nix   (backed up,
               └──── restore, run by hand ──────┘
 ```
 
-- **Export** writes `settings.toml` into the Nix file as an exact mirror. A setting you
-  delete in the GUI also disappears from the file on the next export.
+- **Export** writes `settings.toml` into the Nix file as an exact mirror, live: every
+  change in the GUI is in the file within a few seconds (**Export automatically**, on by
+  default). A setting you delete in the GUI also disappears from the file.
 - **Restore** is a command you run yourself. It builds `settings.toml` from the Nix
   file and puts it in place. Nothing happens automatically.
 
@@ -50,19 +51,35 @@ The wallpaper paths Noctalia rewrites on every wallpaper change (`wallpaper.last
 
 ### Setup
 
-1. **Install and enable** the plugin, and add its control-center tile
-   (see [Where the buttons are](#where-the-buttons-are)).
-2. **Set the target file to a place you back up.** Open **Settings → Plugins**, click
-   the gear on the **Settings to Nix** row and set **Target Nix file**, for example
-   `~/nixos-config/noctalia/gui-settings.nix`. Turning on **Export automatically** is
-   recommended.
-3. **Export once** (right-click the tile, or **Export to Nix** in the panel).
-4. **Back up the file**, for example:
+1. **Install and enable** the plugin.
+2. **Choose where the backup goes.** Open **Settings → Plugins**, click the gear on the
+   **Settings to Nix** row and set **Target Nix file** to a place you back up. The file
+   is written right away and then kept up to date on every change.
+
+   The plugin runs as your user, so it can only write where your user may write. It
+   writes `<target>.tmp` and renames it, so it needs write access to the **directory**,
+   not just the file.
+
+   **In `/etc/nixos`** (owned by root): create one subdirectory that belongs to your
+   user, once, and leave the rest of `/etc/nixos` alone:
 
    ```sh
-   git -C ~/nixos-config add noctalia/gui-settings.nix
-   git -C ~/nixos-config commit -m "noctalia settings"
+   sudo install -d -o "$USER" /etc/nixos/noctalia
    ```
+
+   Then set **Target Nix file** to `/etc/nixos/noctalia/gui-settings.nix`.
+
+   **In your home directory**, for example a config repository in `~/nixos-config`,
+   nothing else is needed.
+3. **Back up the file** together with the rest of your configuration, for example with
+   git:
+
+   ```sh
+   sudo git -C /etc/nixos add noctalia/gui-settings.nix
+   sudo git -C /etc/nixos commit -m "noctalia settings"
+   ```
+
+   The file on disk is always current; a restore brings back the state you backed up.
 
 > [!WARNING]
 > **Settings in a config file are not part of the backup.** Only `settings.toml` (the
@@ -81,14 +98,23 @@ The wallpaper paths Noctalia rewrites on every wallpaper change (`wallpaper.last
 ### Restoring
 
 On a new install, after you got your backup back (for example by cloning your config
-repository), run as your normal user:
+repository to `/etc/nixos`):
 
-```sh
-cd ~/nixos-config/noctalia
-$(nix-build --no-out-link ./gui-settings.nix)/bin/noctalia-restore-settings
-```
+1. **Make the directory writable for your user again.** A fresh clone belongs to root.
+   This is the command from the setup; it also fixes an existing directory:
 
-Then **restart Noctalia** (log out and in again, or restart it however you start it).
+   ```sh
+   sudo install -d -o "$USER" /etc/nixos/noctalia
+   ```
+
+2. **Run the restore** as your normal user, in the directory of the file:
+
+   ```sh
+   cd /etc/nixos/noctalia
+   $(nix-build --no-out-link ./gui-settings.nix)/bin/noctalia-restore-settings
+   ```
+
+3. **Restart Noctalia** (log out and in again, or restart it however you start it).
 
 What the command does:
 
@@ -119,9 +145,11 @@ Things to know:
 
 ### Where the buttons are
 
-After enabling the plugin you will not see a button anywhere yet. Noctalia does not
-add plugin shortcuts to the control center on its own. There are three ways to use
-it; pick one.
+You do not need a button: with **Export automatically** (the default) the file is
+always current. A button is useful to see the status, or if you turn automatic export
+off. Noctalia does not add plugin shortcuts to the control center on its own, so after
+enabling the plugin you will not see one anywhere yet. There are three ways to use it;
+pick one.
 
 > [!NOTE]
 > The control center's Home tab holds **at most six shortcuts**, and the default set
@@ -130,7 +158,7 @@ it; pick one.
 > shortcut first**; until then the **+** button stays disabled and nothing tells you
 > why. If you do not want to give one up, use the panel (B) or automatic export (C).
 
-**A. Control-center tile (recommended)**
+**A. Control-center tile**
 
 1. Open **Settings → Control Center** and expand **Home**. The **Home shortcuts** list
    holds at most **six** shortcuts. When it shows `6/6`, the **+** button is disabled:
@@ -159,13 +187,14 @@ noctalia msg panel-toggle dmopp/settings-to-nix:panel
 The panel shows how many settings the file holds, whether the GUI changed since the
 last export, the target path and an **Export to Nix** button.
 
-**C. No button at all.** Turn on **Export automatically** in the plugin settings.
-Every GUI change is then written to the Nix file within a few seconds.
+**C. No button at all.** Leave **Export automatically** on (the default). Every GUI
+change is then written to the Nix file within a few seconds.
 
 ### Everyday use
 
 1. Change settings in the GUI as usual. They take effect immediately, as always.
-2. Export: right-click the tile, use the panel, or let **Export automatically** do it.
+2. The Nix file follows on its own (**Export automatically**). With it turned off,
+   export with the tile, the panel or IPC.
 3. Back up the Nix file (commit it) regularly. A restore brings back the state of the
    last file you saved.
 
@@ -202,7 +231,7 @@ pkgs.writeShellScriptBin "noctalia-restore-settings" ''
 | Setting | Type | Default | Description |
 | --- | --- | --- | --- |
 | `target_path` | `file` | `~/.config/noctalia/gui-settings.nix` | File the settings are mirrored to. It is overwritten on every export. Put it somewhere you back up. |
-| `auto_export` | `bool` | `false` | Export whenever `settings.toml` changes (checked every 2 seconds) instead of only on demand. |
+| `auto_export` | `bool` | `true` | Export whenever `settings.toml` changes (checked every 2 seconds). Off: only on demand. |
 | `notify` | `bool` | `true` | Notification after a manual export. Errors are always shown. |
 | `remind_export_hours` | `int` | `0` | Notify once when GUI changes have not been exported for this many hours (0–168, 0 = off). Not used with `auto_export`. |
 | `exclude` | `string_list` | wallpaper paths | Dotted paths left out of the export; `*` matches one level (advanced). |
