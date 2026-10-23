@@ -143,6 +143,37 @@ Things to know:
   again.
 - **The wallpaper is not restored** (see [How it works](#how-it-works)); pick it once.
 
+### Restoring automatically (optional)
+
+The file also exposes the settings themselves as `.settings`, so your configuration can
+write `settings.toml` on its own whenever it is missing (new install, lost state), with
+no command to run. An existing `settings.toml` is never touched. On NixOS (replace
+`alice` with your user name):
+
+```nix
+{ pkgs, ... }:
+let
+  noctaliaSettings = (import ./noctalia/gui-settings.nix { inherit pkgs; }).settings;
+  noctaliaSeed = (pkgs.formats.toml { }).generate "noctalia-settings.toml" noctaliaSettings;
+in
+{
+  system.userActivationScripts.noctalia-settings-seed = ''
+    if [ "$USER" = alice ]; then
+      dir="''${XDG_STATE_HOME:-$HOME/.local/state}/noctalia"
+      if [ ! -e "$dir/settings.toml" ]; then
+        mkdir -p "$dir"
+        install -m 644 ${noctaliaSeed} "$dir/settings.toml"
+        touch "$dir/.setup-complete"
+      fi
+    fi
+  '';
+}
+```
+
+It runs at login and on every switch. With Home Manager, put the same shell lines into
+`home.activation.<name> = lib.hm.dag.entryAfter [ "writeBoundary" ] '' … '';`. The file
+has to be tracked by git when your configuration is a flake.
+
 ### Where the buttons are
 
 You do not need a button: the file is always current. A button only shows the status

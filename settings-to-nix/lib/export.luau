@@ -124,7 +124,8 @@ local function header(source, name)
 end
 
 -- The restore script around the rendered settings. It writes them back as settings.toml
--- to the state dir Noctalia uses (same lookup as FileUtils::stateDir()).
+-- to the state dir Noctalia uses (same lookup as FileUtils::stateDir()). The settings
+-- are also exposed as `.settings`, so a configuration can use them directly.
 local function script(settings)
 	return table.concat({
 		"{ pkgs ? import <nixpkgs> { } }:",
@@ -132,7 +133,7 @@ local function script(settings)
 		"  settings = " .. settings .. ";",
 		'  settingsToml = (pkgs.formats.toml { }).generate "noctalia-settings.toml" settings;',
 		"in",
-		'pkgs.writeShellScriptBin "noctalia-restore-settings" \'\'',
+		'(pkgs.writeShellScriptBin "noctalia-restore-settings" \'\'',
 		"  set -eu",
 		"  PATH=${pkgs.coreutils}/bin:$PATH",
 		'  if [ -n "\'\'${NOCTALIA_STATE_HOME:-}" ]; then',
@@ -154,7 +155,7 @@ local function script(settings)
 		'  touch "$dir/.setup-complete"',
 		'  echo "Noctalia settings restored to $dir/settings.toml."',
 		'  echo "Restart Noctalia so it installs the plugins from the restored settings."',
-		"\'\'",
+		"\'\') // { inherit settings; }",
 		"",
 	}, "\n")
 end
