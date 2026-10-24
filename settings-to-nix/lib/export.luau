@@ -12,6 +12,8 @@ local M = {}
 -- Part of the first line of every file this plugin writes; an existing target without
 -- it is not overwritten.
 local MARKER = "dmopp/settings-to-nix"
+-- Name part of the private temp directories next to the target.
+local MARKER_DIR = "settings-to-nix"
 
 -- Left out of the export: the wallpaper paths Noctalia rewrites on every wallpaper
 -- change. Dotted paths; `*` matches exactly one level.
@@ -149,8 +151,10 @@ local function script(settings)
 		'    cp "$dir/settings.toml" "$backup"',
 		'    echo "Previous settings saved to $backup"',
 		"  fi",
-		'  install -m 644 ${settingsToml} "$dir/settings.toml.tmp"',
-		'  mv "$dir/settings.toml.tmp" "$dir/settings.toml"',
+		'  tmp=$(mktemp "$dir/.settings.toml.XXXXXX")',
+		'  cat ${settingsToml} > "$tmp"',
+		'  chmod 644 "$tmp"',
+		'  mv "$tmp" "$dir/settings.toml"',
 		"  # Skip the first-run wizard; it would write its own choices over the restored ones.",
 		'  touch "$dir/.setup-complete"',
 		'  echo "Noctalia settings restored to $dir/settings.toml."',
@@ -158,6 +162,48 @@ local function script(settings)
 		"\'\') // { inherit settings; }",
 		"",
 	}, "\n")
+end
+
+local function splitPath(path)
+	local dir, name = string.match(path, "^(.*)/([^/]*)$")
+	return (dir == "" and "/" or dir), name or path
+end
+
+-- Checks the target before it is replaced. Returns the current content when this plugin
+-- wrote it, nil when nothing is there, or nil, err when something is there whose
+-- ownership cannot be verified: a file without the marker, an unreadable file, a
+-- directory or a dangling symlink.
+function M.inspectTarget(target)
+	local dir, name = splitPath(target)
+	local present = noctalia.fileExists(target)
+	if not present and noctalia.fileExists(dir) then
+		-- fileExists follows symlinks; the listing also shows a dangling one.
+		local entries = noctalia.listDir(dir)
+		if entries == nil then
+			return nil, noctalia.tr("errors.unverifiable", { path = target, error = "cannot list " .. dir })
+		end
+		present = table.find(entries, name) ~= nil
+	end
+	if not present then
+		return nil
+	end
+
+	local info, infoErr = noctalia.fileInfo(target)
+	if not info then
+		return nil, noctalia.tr("errors.unverifiable", { path = target, error = tostring(infoErr) })
+	end
+	if info.isDir then
+		return nil, noctalia.tr("errors.foreign", { path = target })
+	end
+	local text, readErr = noctalia.readFile(target)
+	if not text then
+		return nil, noctalia.tr("errors.unverifiable", { path = target, error = tostring(readErr) })
+	end
+	local firstLine = string.match(text, "^[^\n]*") or ""
+	if not string.find(firstLine, MARKER, 1, true) then
+		return nil, noctalia.tr("errors.foreign", { path = target })
+	end
+	return text
 end
 
 -- Builds the file content from the current settings.toml.
@@ -168,10 +214,9 @@ function M.plan(cfg)
 		return nil, noctalia.tr("errors.no_target")
 	end
 
-	local current = noctalia.fileExists(target) and noctalia.readFile(target) or nil
-	local firstLine = current and string.match(current, "^[^\n]*") or ""
-	if current and current ~= "" and not string.find(firstLine, MARKER, 1, true) then
-		return nil, noctalia.tr("errors.foreign", { path = target })
+	local current, targetErr = M.inspectTarget(target)
+	if targetErr then
+		return nil, targetErr
 	end
 
 	local source = M.settingsPath()
@@ -199,45 +244,68 @@ function M.plan(cfg)
 	}
 end
 
--- Writes plan.content to plan.target via a temp file, checking it with
--- `nix-instantiate --parse` first when the tool exists.
--- Calls done(true) or done(false, err).
+-- Writes plan.content to plan.target. The content goes into a private directory that
+-- `mktemp -d` creates exclusively next to the target (mode 0700, so nothing can be
+-- waiting there, neither a file nor a symlink), is checked with `nix-instantiate --parse`
+-- when the tool exists, and is then renamed over the target, which is checked again
+-- right before. Calls done(true) or done(false, err).
 function M.write(plan, done)
 	local target = plan.target
-	local dir = string.match(target, "^(.*)/[^/]*$")
-	if dir and dir ~= "" then
-		local ok, err = noctalia.mkdirAll(dir)
-		if not ok then
-			return done(false, noctalia.tr("errors.write", { path = dir, error = tostring(err) }))
-		end
-	end
-	local tmp = target .. ".tmp"
-	local ok, err = noctalia.writeFile(tmp, plan.content)
+	local dir, name = splitPath(target)
+	local ok, err = noctalia.mkdirAll(dir)
 	if not ok then
-		return done(false, noctalia.tr("errors.write", { path = tmp, error = tostring(err) }))
+		return done(false, noctalia.tr("errors.write", { path = dir, error = tostring(err) }))
 	end
 
-	local function commit()
-		local renamed, renameErr = noctalia.renameFile(tmp, target)
-		if not renamed then
-			noctalia.removeFile(tmp)
-			return done(false, noctalia.tr("errors.write", { path = target, error = tostring(renameErr) }))
+	local prefix = dir .. "/." .. MARKER_DIR .. "."
+	local started = noctalia.runAsync({ "mktemp", "-d", prefix .. "XXXXXX" }, function(made)
+		local tmpDir = noctalia.string.trim(made.stdout or "")
+		if made.exitCode ~= 0 or string.sub(tmpDir, 1, #prefix) ~= prefix or string.find(tmpDir, "/", #prefix + 1, true) then
+			local reason = noctalia.string.trim(made.stderr or "")
+			return done(false, noctalia.tr("errors.write", { path = dir, error = reason ~= "" and reason or "mktemp failed" }))
 		end
-		done(true)
-	end
+		local tmp = tmpDir .. "/" .. name
 
-	if not noctalia.commandExists("nix-instantiate") then
-		return commit()
-	end
-	local started = noctalia.runAsync({ "nix-instantiate", "--parse", tmp }, function(result)
-		if result.exitCode ~= 0 then
-			noctalia.removeFile(tmp)
-			return done(false, noctalia.tr("errors.invalid", { error = noctalia.string.trim(result.stderr or "") }))
+		local function finish(success, message)
+			if noctalia.fileExists(tmp) then
+				noctalia.removeFile(tmp)
+			end
+			noctalia.runAsync({ "rmdir", tmpDir })
+			done(success, message)
 		end
-		commit()
+
+		local written, writeErr = noctalia.writeFile(tmp, plan.content)
+		if not written then
+			return finish(false, noctalia.tr("errors.write", { path = tmp, error = tostring(writeErr) }))
+		end
+
+		local function commit()
+			local _, targetErr = M.inspectTarget(target)
+			if targetErr then
+				return finish(false, targetErr)
+			end
+			local renamed, renameErr = noctalia.renameFile(tmp, target)
+			if not renamed then
+				return finish(false, noctalia.tr("errors.write", { path = target, error = tostring(renameErr) }))
+			end
+			finish(true)
+		end
+
+		if not noctalia.commandExists("nix-instantiate") then
+			return commit()
+		end
+		local checking = noctalia.runAsync({ "nix-instantiate", "--parse", tmp }, function(result)
+			if result.exitCode ~= 0 then
+				return finish(false, noctalia.tr("errors.invalid", { error = noctalia.string.trim(result.stderr or "") }))
+			end
+			commit()
+		end)
+		if not checking then
+			commit()
+		end
 	end)
 	if not started then
-		commit()
+		done(false, noctalia.tr("errors.write", { path = dir, error = "could not start mktemp" }))
 	end
 end
 

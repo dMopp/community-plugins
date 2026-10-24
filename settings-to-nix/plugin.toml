@@ -12,7 +12,7 @@ license = "MIT"
 icon = "snowflake"
 description = "Backs up your Noctalia GUI settings as a Nix file that restores them with one nix-build command."
 tags = ["shortcut", "service", "nixos", "utility"]
-dependencies = ["nix"]
+dependencies = ["nix", "coreutils"]
 
 [[setting]]
 key = "target_path"

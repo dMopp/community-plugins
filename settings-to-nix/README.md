@@ -25,6 +25,8 @@ one.
 - `nix` with `nixpkgs` on the Nix path, to run the restore (`nix-build`).
   `nix-instantiate` on `PATH` is used to check the file before an export replaces the
   old one; without it the check is skipped.
+- `coreutils` on `PATH` (`mktemp`, `rmdir`), for the private temporary directory an
+  export writes into. Always present on NixOS.
 
 ## How it works
 
@@ -58,8 +60,8 @@ wallpaper does not change the file.
    is written right away and then kept up to date on every change.
 
    The plugin runs as your user, so it can only write where your user may write. It
-   writes `<target>.tmp` and renames it, so it needs write access to the **directory**,
-   not just the file.
+   writes into a temporary directory next to the target and renames the file, so it
+   needs write access to the **directory**, not just the file.
 
    **In `/etc/nixos`** (owned by root): create one subdirectory that belongs to your
    user, once, and leave the rest of `/etc/nixos` alone:
@@ -270,13 +272,16 @@ configuration.
 ## Notes
 
 - **Nothing of yours is overwritten.** The plugin only replaces a target file that it
-  wrote itself (recognized by its first line). Point it at any other existing file and
-  the export stops with an error.
-- **Files written:** only the target file (via `<target>.tmp` and a rename). The plugin
-  never writes `settings.toml`; only the restore command you run yourself does.
-- **Processes:** only `nix-instantiate --parse <target>.tmp`, to check the file before
-  it replaces the old one (skipped when `nix-instantiate` is not on `PATH`). There is no
-  network access.
+  wrote itself (recognized by its first line). If anything else is at the target path,
+  including a file it cannot read, a directory or a dangling symlink, the export stops
+  with an error. The check runs again right before the file is replaced.
+- **Files written:** only the target file. An export writes into a private directory
+  that `mktemp -d` creates next to the target (`.settings-to-nix.XXXXXX`, mode 0700),
+  then renames the file over the target and removes the directory. The plugin never
+  writes `settings.toml`; only the restore command you run yourself does.
+- **Processes:** `mktemp -d` and `rmdir` for that directory, and
+  `nix-instantiate --parse` on the new file before it replaces the old one (skipped when
+  `nix-instantiate` is not on `PATH`). There is no network access.
 - **A failed write** (for example a directory your user may not write to) is shown once
   and retried when a setting or the target path changes. After fixing the cause,
   right-click the tile (or use the panel or IPC) to export right away.
