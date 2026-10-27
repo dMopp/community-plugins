@@ -295,9 +295,10 @@ local function handleTraffic(response)
 	local iface, resolveErr = resolve(all)
 	local selectedId = iface ~= nil and iface.id or ""
 
-	-- Rates use the firewall's own timestamp of the counters: the local
-	-- nowMs() clock stops during suspend and response latency varies, both of
-	-- which made the byte delta look like a burst. Wall clock as a fallback.
+	-- Rates use the firewall's own timestamp of the counters, not the arrival
+	-- time of the response: a response delayed on a stalled connection followed
+	-- by a prompt one squeezes a long byte delta into a short local interval.
+	-- Wall clock as a fallback.
 	local now = tonumber(data.time) or os.time()
 	local maxGap = math.max(tonumber(config("poll_interval", 2)) or 2, 1) * 5
 	local interfaces = {}
