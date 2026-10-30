@@ -1,0 +1,182 @@
+# NixOS Updates
+
+Shows what an update would bring, like `apt list --upgradable` on Debian:
+the flake inputs that have new commits, the package versions of your NixOS
+configuration that change with them (`brave 1.97.59 → 1.98.60`), and pending
+Flatpak updates. The bar widget shows the count as a filled badge, the panel
+the details.
+
+Checking does not touch your configuration: `flake.lock` stays as it is, nothing
+is built or installed. Updating is up to you, through the command you set for
+the panel's **Update** button.
+
+## Plugin
+
+| Field | Value |
+| --- | --- |
+| ID | `dmopp/nixos-updates` |
+| Entries | Bar widget: `updates`; panels: `panel` (compact), `details` (full list); service: `service` |
+
+## Requirements
+
+- `nix` with flakes (the plugin passes `--extra-experimental-features "nix-command flakes"`
+  itself) and support for `nix flake update --output-lock-file` and
+  `nix eval --reference-lock-file`. Tested with Nix 2.34.
+- `sh`, `timeout`, `cat`, `cmp`, `cp`, `cut`, `grep`, `mv`, `rm`, `sed`, `tail`,
+  `tr` (a shell, coreutils, diffutils, grep, sed).
+- Optional: `flatpak` for the Flatpak list; without it that section is left out.
+- Optional: `xdg-open` to open changelogs and commit comparisons from the panels.
+
+## Usage
+
+1. Enable the plugin and add the bar widget `dmopp/nixos-updates:updates`.
+2. Open the settings (Settings → Plugins → gear). **Flake directory** defaults
+   to `/etc/nixos`; **NixOS configuration** defaults to the hostname.
+3. Set **Update command** to whatever you use to update, for example
+   `nix flake update --flake /etc/nixos && sudo nixos-rebuild switch --flake /etc/nixos && flatpak update -y`.
+   It runs in a terminal from the panel's **Update** button.
+
+The first check runs about a minute after the plugin starts when the last one
+is older than the check interval; the result of the last check is kept across
+restarts. After a failed check (no network yet, for instance) the plugin tries
+again every 15 minutes and keeps showing the last known lists. A change of `flake.lock` or of a Flatpak installation (after you
+updated) triggers a new check within about two minutes. A change of the
+configuration alone does not; it shows with the next check or **Check now**.
+
+Left-click the widget for the panel:
+
+- **Package changes**: every entry of `environment.systemPackages` plus the
+  kernel whose version changes, appears or disappears. Packages are told apart
+  by name, so a renamed one shows up as removed plus new.
+- **Flatpak updates**: system and user installation, installed and new
+  version (runtimes without a version show "new build").
+- **Flake inputs with new commits**: old and new revision, source and commit
+  dates.
+- **Check now** and **Update**.
+
+Packages and Flatpaks come first, the inputs after.
+The compact panel shows at most eight rows in all; where it cuts the list, one
+button says how many updates are hidden and opens the details window
+("9 more · show all 17 updates", the same count as above). The maximize
+button in the header opens it as well: one table with name, installed and new
+version and where to read the changes, plus a search field and a filter by
+kind.
+
+Changes column (a click on the row opens it; in the compact panel too):
+
+- Packages: the package's `meta.changelog` from nixpkgs, often for exactly
+  the new version; else the GitHub releases page when the homepage is a
+  GitHub repository; else "No changelog".
+- Flatpaks from Flathub: the app page, which lists the release notes.
+  Runtimes have none.
+- Inputs on GitHub, GitLab or Codeberg: the comparison of both revisions; else
+  "No comparison available".
+
+Plugins get no activation token, so whether the browser window comes to the
+front is up to the compositor; it may open on another workspace.
+
+```sh
+noctalia msg panel-toggle dmopp/nixos-updates:panel
+noctalia msg panel-toggle dmopp/nixos-updates:details
+```
+
+The count is the number of listed rows: package changes, Flatpak updates and
+inputs with new commits. An input counts on its own because a package built
+from it can get new commits without a new version number, so it would not show
+up as a package change. A nixpkgs bump therefore counts as one more on top of
+the packages it changes. While updates are pending the widget is a filled
+badge. Errors turn the badge to the error color and show up in the tooltip and
+the panel.
+
+## Settings
+
+Plugin settings:
+
+| Setting | Type | Default | Description |
+| --- | --- | --- | --- |
+| `flake_dir` | `folder` | `/etc/nixos` | Directory with `flake.nix` and `flake.lock`, as an absolute path without `?` or `#`. Not written to. Empty: only Flatpaks. |
+| `nixos_configuration` | `string` | `""` | Attribute under `nixosConfigurations` to evaluate. Empty: the hostname. |
+| `check_packages` | `bool` | `true` | Evaluate the configuration with the current and the updated lock and compare package versions. |
+| `check_flatpak` | `bool` | `true` | List pending Flatpak updates of the system and user installations. |
+| `check_interval_hours` | `int` | `6` | Hours between two checks (1-168). After a failed check at most 15 minutes. |
+| `update_command` | `string` | `""` | Shell command for the **Update** button, run in a terminal when you press it, never on its own. Empty: the button opens the settings instead. |
+| `notify` | `bool` | `true` | Notify when a check finds updates that were not pending before. |
+| `ignored_inputs` | `string_list` | `[]` | Advanced. Input names left out of the input list. Packages they change are still listed. |
+
+Widget settings:
+
+| Setting | Type | Default | Description |
+| --- | --- | --- | --- |
+| `glyph` | `glyph` | `package` | Glyph of the widget |
+| `show_count` | `bool` | `true` | Show the number of updates |
+| `show_zero` | `bool` | `false` | Show `0` when up to date |
+| `hide_when_up_to_date` | `bool` | `false` | Hide the widget while nothing is pending and there is no error |
+| `highlight_color` | `color` | `tertiary` | Background of the badge while updates are pending (errors: `error`) |
+
+## IPC
+
+```sh
+noctalia msg plugin dmopp/nixos-updates:service all check    # check now
+noctalia msg plugin dmopp/nixos-updates:service all update   # run the update command in a terminal
+```
+
+## Notes
+
+- **How the check works** (`scripts/check.sh`, started with `runStream` as it
+  can take longer than the 60 s limit of `runAsync`):
+  1. `nix flake update --flake <flake_dir> --output-lock-file <data>/new.lock`
+     resolves every input to its latest revision and writes the result to the
+     plugin data directory, not to `flake.lock`.
+  2. `nix eval --json --no-write-lock-file --reference-lock-file <lock> '<flake_dir>#nixosConfigurations."<name>".config' --apply …`
+     reads name, version, `meta.changelog` and `meta.homepage` of every
+     `environment.systemPackages` entry and of `boot.kernelPackages.kernel`, once
+     with `flake.lock` and once with `new.lock`, both with the configuration as
+     it is at that moment, so that an edit of the configuration does not look
+     like an update. When both locks are equal the second evaluation is skipped.
+  3. `flatpak list` (with origin, for the Flathub link) and
+     `flatpak remote-ls --system|--user --updates`.
+
+  Every `nix` and `flatpak` call runs under `timeout` (10 minutes for the
+  flake update, 15 per evaluation, 3 per Flatpak call) without stdin, so a
+  stalled call cannot keep the script alive; the service gives a run up only
+  after an hour and ignores anything a given-up run still prints.
+- **Security - unaccepted code is evaluated:** step 2 evaluates the Nix code of
+  input revisions you have not accepted yet, automatically and in the
+  background. Nix evaluation is pure here (no `--impure`), and the plugin
+  overrides your `nix.conf` for these calls: `accept-flake-config = false`,
+  `allow-unsafe-native-code-during-evaluation = false`, `max-jobs = 0` and no
+  `builders`, so nothing is built. A build the evaluation asks for (import from
+  derivation) can only come from a binary cache; otherwise the evaluation fails
+  and the panel lists only the inputs. If you do not want this, turn off
+  `check_packages`: then only the lock file is compared.
+- **Security - links** (changelogs, releases, Flathub, commit comparisons) come
+  from `flake.lock` and package metadata. Only plain `http://` / `https://` URLs
+  are shown and opened, with a host that cannot be disguised and without
+  whitespace or shell metacharacters; anything else (`file://`, paths, values
+  starting with `-`) gets no link. Credentials in an input URL are not shown.
+- **Network:** `nix` fetches the inputs' latest revisions (and, on the first
+  evaluation of a new revision, its source) like `nix flake update` does, using
+  your flake registry and binary caches; `flatpak remote-ls` fetches the remotes'
+  metadata. The plugin itself makes no HTTP requests. Automatic checks pause
+  while `shell.offline_mode` is on; **Check now** and the IPC command still run.
+- **CPU:** an evaluation of the NixOS configuration takes a few seconds to a
+  minute, depending on the configuration; Nix's own caches make it much
+  cheaper when neither the lock nor the configuration changed.
+- **Files read:** `<flake_dir>` through `nix`, directly `flake.lock`, and
+  `/var/lib/flatpak/.changed` and `~/.local/share/flatpak/.changed` (modification
+  time only).
+- **Files written:** by the plugin only in its data directory
+  (`noctalia.pluginDataDir()`, owner only): `new.lock`, `packages-old.json`,
+  `packages-new.json`, `flatpak-installed.tsv`, `flatpak-updates.tsv`, `stderr`
+  during a run, and `result.json` with the last result. `nix` also does what
+  every flake command does: it copies `<flake_dir>` to the world-readable Nix
+  store (for a Git repository only tracked files, otherwise the whole directory),
+  stores fetched input sources there until the next garbage collection, and uses
+  `~/.cache/nix`.
+- **Processes:** `sh scripts/check.sh` (with the `nix` and `flatpak` calls
+  above), `xdg-open <url>` on a click on a row with a changes link, and the
+  configured update command in a terminal on **Update**.
+- Only packages listed in `environment.systemPackages` (and the kernel) are
+  compared, not their dependencies or services. Home Manager packages are not
+  included. A package built from an input can get new commits without a new
+  version number; then only the input is listed.
