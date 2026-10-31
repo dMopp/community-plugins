@@ -3041,8 +3041,8 @@ rev = "342d37313974ccd6afa86276e82c3c8d3ad32785"
 [[plugin]]
 id = "prponkshe/umbriel-displays"
 name = "Umbriel Displays"
-version = "1.0.4"
-updated_at = 1792983494
+version = "1.0.5"
+updated_at = 1793455620
 added_at = 1789086907
 author = "prponkshe"
 license = "MIT"
