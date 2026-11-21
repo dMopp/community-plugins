@@ -3,7 +3,6 @@
     "all": "All ({count})",
     "changes": "Changes",
     "flatpak": "Flatpak ({count})",
-    "incomplete": "Nothing to show: the check did not complete.",
     "inputs": "Flake inputs ({count})",
     "installed": "Installed",
     "link_changelog": "Changelog",
@@ -17,6 +16,7 @@
     "no_match": "Nothing matches the search.",
     "not_installed": "not installed",
     "nothing": "Nothing to update.",
+    "incomplete": "Nothing to show: the check did not complete.",
     "packages": "Packages ({count})",
     "removed": "removed",
     "search": "Search by name or version"
@@ -38,7 +38,8 @@
     "token_in_flake": "The token file is inside the flake directory, from where Nix could copy it to the world-readable store. Not used: {path}",
     "token_missing": "Token file not found: {path}. Checking without a token.",
     "token_mode": "Other users could read the token file. Not used until you run chmod 600 on it: {path}",
-    "token_owner": "The token file belongs to another user. Not used: {path}"
+    "token_owner": "The token file belongs to another user. Not used: {path}",
+    "untracked": "{file} is not tracked by Git, and Nix reads a Git repository with tracked files only. If you build with path: (nixos-rebuild --flake path:{dir}), turn on \"Evaluate as path: flake\" in the settings; otherwise add the file to Git."
   },
   "notify": {
     "body": {
@@ -108,16 +109,20 @@
       "label": "Compare package versions"
     },
     "cleanup_button": {
-      "description": "Shows a Clean up button in the panel. It runs the system's own Nix cleanup (nix-gc.service and nix-optimise.service where NixOS has them, else only unused store paths, no generations) and removes unused Flatpak runtimes, in a terminal.",
-      "label": "Clean up button"
+      "label": "Clean up button",
+      "description": "Shows a Clean up button in the panel. It runs the system's own Nix cleanup (nix-gc.service and nix-optimise.service where NixOS has them, else only unused store paths, no generations) and removes unused Flatpak runtimes, in a terminal."
+    },
+    "flake_as_path": {
+      "label": "Evaluate as path: flake",
+      "description": "Evaluate path:<flake directory> instead of the Git repository, like nixos-rebuild --flake path:…. Only if your configuration imports files Git does not track and you build it that way anyway: Nix then copies every file of the directory, untracked ones included, to the world-readable Nix store."
     },
     "flake_dir": {
       "description": "Directory with flake.nix and flake.lock, as an absolute path. Not written to; the updated lock goes to the plugin's data directory. Empty: only Flatpaks.",
       "label": "Flake directory"
     },
     "github_token_file": {
-      "description": "Only needed if you reach GitHub's rate limit of 60 requests per hour. Path to a file holding a token without permissions, chmod 600, outside the flake directory. The README shows how to create it. Never paste the token itself here.",
-      "label": "GitHub token file (optional)"
+      "label": "GitHub token file (optional)",
+      "description": "Only needed if you reach GitHub's rate limit of 60 requests per hour. Path to a file holding a token without permissions, chmod 600, outside the flake directory. The README shows how to create it. Never paste the token itself here."
     },
     "glyph": {
       "label": "Glyph"
@@ -130,8 +135,8 @@
       "label": "Badge color with updates"
     },
     "home_configuration": {
-      "description": "Name under homeConfigurations in the same flake, for example alice. Its home.packages are compared too. Home Manager as a NixOS module needs nothing here: its users' packages are included anyway. Empty: none.",
-      "label": "Standalone Home Manager configuration"
+      "label": "Standalone Home Manager configuration",
+      "description": "Name under homeConfigurations in the same flake, for example alice. Its home.packages are compared too. Home Manager as a NixOS module needs nothing here: its users' packages are included anyway. Empty: none."
     },
     "ignored_inputs": {
       "description": "Flake input names to leave out of the input list, for example ones you update on your own schedule.",
